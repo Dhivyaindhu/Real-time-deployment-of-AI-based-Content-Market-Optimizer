@@ -1,0 +1,11 @@
+streamlit
+transformers
+torch
+accelerate
+peft
+bitsandbytes
+sentencepiece
+textstat
+protobuf
+scipy
+numpy
