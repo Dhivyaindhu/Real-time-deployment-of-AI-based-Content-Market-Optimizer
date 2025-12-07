@@ -1,10 +1,11 @@
 import torch
 from transformers import pipeline
+import re
 import random
 
 device = -1  # CPU
 
-# Load custom model if available, else fallback
+# Try loading custom LoRA model
 try:
     model_path = "./AI_Content_Optimizer_Trained"
     generator = pipeline(
@@ -13,8 +14,9 @@ try:
         tokenizer=model_path,
         device=device
     )
+    print("✅ Loaded trained model")
 except:
-    print("⚠️ Custom model not found. Using distilgpt2 fallback.")
+    print("⚠️ Trained model not found. Using distilgpt2.")
     generator = pipeline(
         "text-generation",
         model="distilgpt2",
@@ -22,51 +24,100 @@ except:
         device=device
     )
 
-def build_prompt(platform, topic, tone="professional", size="medium", n_variations=3):
+# -------------------------------------------------------------------
+# STRICT FORMATTER (MOST IMPORTANT PART)
+# -------------------------------------------------------------------
+
+def clean_output(text):
+    """
+    Removes repeated prompt, repeated instructions, junk, and extracts only numbered content.
+    """
+    text = text.replace("\n\n", "\n")
+    lines = text.split("\n")
+
+    cleaned = []
+    for line in lines:
+        line = line.strip()
+
+        # Extract only lines starting with "1." "2." "3." etc.
+        if re.match(r"^\d+\.", line):
+            cleaned.append(line)
+
+    return "\n".join(cleaned).strip()
+
+
+# -------------------------------------------------------------------
+# STRONG PROMPT BUILDER
+# -------------------------------------------------------------------
+
+def build_prompt(platform, topic, tone, size, n):
     size_map = {
-        "short": "1–2 sentences",
-        "medium": "3–4 sentences",
-        "long": "5–8 sentences"
+        "Short": "1–2 sentences",
+        "Medium": "3–4 sentences",
+        "Long": "5–8 sentences"
     }
-    size_instruction = size_map.get(size.lower(), size_map["medium"])
 
-    prompt = f"""
-Generate {n_variations} unique content variations for {platform}.
-Topic: "{topic}"
+    return f"""
+You are an AI social media content generator.
+
+Generate EXACTLY {n} short content variations for {platform} about: "{topic}".
+
 Tone: {tone}
-Length: {size_instruction}
+Length: {size_map[size]}
 
-Each variation must:
-- Follow the tone style
-- Match the platform audience
-- Be formatted as a numbered list (1., 2., 3., ...)
+Rules:
+1. You MUST output only a numbered list.
+2. Format strictly like:
+   1. sentence
+   2. sentence
+   3. sentence
+3. NO paragraphs, NO hashtags, NO emojis.
+4. NO repeating instructions.
+5. Only clean, final content.
 
-Do NOT include examples. 
-Do NOT repeat the instructions. 
-Start generating now.
-"""
-    return prompt.strip()
+Now generate the content:
+""".strip()
 
-def generate_content(prompt, max_tokens=350, n_variations=3, temperature=0.85):
-    outputs = generator(
+
+# -------------------------------------------------------------------
+# GENERATOR FUNCTION
+# -------------------------------------------------------------------
+
+def generate_content(prompt, n_sequences):
+    raw_outputs = generator(
         prompt,
-        max_new_tokens=max_tokens,
-        temperature=temperature,
-        do_sample=True,
-        top_p=0.92,
-        num_return_sequences=n_variations
+        max_new_tokens=180,
+        temperature=0.8,
+        top_p=0.9,
+        num_return_sequences=n_sequences,
+        do_sample=True
     )
-    return [out["generated_text"].strip() for out in outputs]
+
+    return [clean_output(o["generated_text"]) for o in raw_outputs]
+
+
+# -------------------------------------------------------------------
+# SCORING (FAKE ENGAGEMENT SCORE)
+# -------------------------------------------------------------------
 
 def mock_engagement_score(text):
-    return round(random.uniform(60, 100), 2)
+    return round(random.uniform(65, 100), 2)
 
-def select_top_content(contents):
-    scored = [{"content": c, "engagement_score": mock_engagement_score(c)} for c in contents]
-    return max(scored, key=lambda x: x["engagement_score"]), scored
 
-def generate_for_user(platform, topic, tone="professional", size="medium", n_variations=3):
-    prompt = build_prompt(platform, topic, tone, size, n_variations)
-    variations = generate_content(prompt, n_variations=n_variations)
-    top, _ = select_top_content(variations)
-    return top, variations
+# -------------------------------------------------------------------
+# MAIN FUNCTION CALLED FROM app.py
+# -------------------------------------------------------------------
+
+def generate_for_user(platform, topic, tone, size, n):
+    prompt = build_prompt(platform, topic, tone, size, n)
+    variations = generate_content(prompt, n)
+
+    # If any variation fails to follow structure → try to fix
+    fixed_variations = []
+    for v in variations:
+        if v.strip() == "":
+            # fallback: create blank numbered structure
+            v = "\n".join([f"{i+1}. ..." for i in range(n)])
+        fixed_variations.append(v)
+
+    return fixed_variations[0], fixed_variations
