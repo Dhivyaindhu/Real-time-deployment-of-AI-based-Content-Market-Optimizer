@@ -1,62 +1,102 @@
 import streamlit as st
-from model_generator import generate_content, build_prompt
-from sentiment_analyzer import analyze_sentiment
-from performance_metrics import performance_metrics, pick_best_version
+from model_generator import generate_for_user, mock_engagement_score
+from textblob import TextBlob
+import textstat
 
-st.set_page_config(page_title="AI Content Marketing Optimizer", layout="wide")
+# -----------------------------
+# Page Setup
+# -----------------------------
+st.set_page_config(
+    page_title="AI Content Marketing Optimizer",
+    page_icon="🤖",
+    layout="wide"
+)
 
 st.title("🎯 AI Content Marketing Optimizer")
-st.write("Generate, analyze, and optimize content using your fine-tuned AI model.")
-
-st.markdown("---")
+st.markdown(
+    "Generate, analyze, and optimize social media content using your AI model."
+)
 
 # -----------------------------
 # User Inputs
 # -----------------------------
+platform = st.selectbox("Platform", ["Instagram", "YouTube", "TikTok", "Blog", "LinkedIn"])
+topic = st.text_input("Topic / Niche", "AI in Healthcare")
+tone = st.selectbox("Tone of the Content", ["Professional", "Friendly", "Witty"])
+size = st.selectbox("Content Size", ["Short", "Medium", "Long"])
+n_variations = st.slider("Number of Variations", 1, 5, 3)
 
-platform = st.text_input("📝 Platform (Instagram, YouTube, Blog, LinkedIn, etc.)")
-topic = st.text_input("🎯 Topic / Niche")
-tone = st.selectbox("🎭 Tone of the Content", ["friendly", "professional", "witty", "emotional"])
-size = st.selectbox("📏 Content Size", ["short", "medium", "long"])
-
-generate_btn = st.button("🚀 Generate Optimized Content")
+generate_btn = st.button("Generate Content")
 
 # -----------------------------
-# Run the Model
+# Helper Functions
 # -----------------------------
+def calculate_sentiment(text):
+    """Returns sentiment polarity 0-1 (positive vs negative)."""
+    blob = TextBlob(text)
+    polarity = blob.sentiment.polarity  # -1 to 1
+    return round((polarity + 1) / 2, 3)  # convert to 0-1
 
+def calculate_readability(text):
+    """Returns Flesch Reading Ease score (0-100)."""
+    try:
+        return round(textstat.flesch_reading_ease(text), 2)
+    except:
+        return 0
+
+def clean_generated_text(text):
+    """
+    Cleans the model output by removing instruction lines and keeping numbered content.
+    """
+    lines = text.split("\n")
+    numbered_lines = [line for line in lines if line.strip() and line.strip()[0].isdigit()]
+    if numbered_lines:
+        return "\n".join(numbered_lines)
+    else:
+        return text.strip()
+
+# -----------------------------
+# Generate Content
+# -----------------------------
 if generate_btn:
+    with st.spinner("⏳ Generating content variations..."):
+        # Generate content
+        top_content, variations = generate_for_user(platform, topic, tone, size, n_variations)
 
-    if not platform or not topic:
-        st.warning("⚠️ Please enter both Platform and Topic before generating.")
-        st.stop()
+        # Clean and score each variation
+        scored_contents = []
+        for v in variations:
+            clean_text = clean_generated_text(v['content'])
+            readability = calculate_readability(clean_text)
+            sentiment = calculate_sentiment(clean_text)
+            engagement = mock_engagement_score(clean_text)  # replace with real metric if available
+            scored_contents.append({
+                "content": clean_text,
+                "readability": readability,
+                "sentiment_strength": sentiment,
+                "engagement_score": engagement
+            })
 
-    prompt = build_prompt(platform, topic, tone, size)
-
-    st.info("⏳ Generating content variations... please wait.")
-    variations = generate_content(prompt)
-
-    st.markdown("---")
-    st.subheader("✨ Generated Content Variations")
-
-    all_metrics = []
-
-    for i, text in enumerate(variations):
-        st.write(f"### 🔹 Variation {i+1}")
-        st.write(text)
-
-        sentiment, score = analyze_sentiment(text)
-        metrics = performance_metrics(text, score)
-        all_metrics.append(metrics)
-
-        st.json(metrics)
-        st.markdown("---")
+        # Identify top content
+        top = max(scored_contents, key=lambda x: x["engagement_score"])
 
     # -----------------------------
-    # Best Output Selection
+    # Display Results
     # -----------------------------
-    best_text, best_score = pick_best_version(variations)
+    st.markdown("### 🔹 Generated Content Variations")
+    for i, c in enumerate(scored_contents, 1):
+        st.subheader(f"Variation {i}")
+        st.write(c["content"])
+        st.json({
+            "readability": c["readability"],
+            "sentiment_strength": c["sentiment_strength"],
+            "engagement_score": c["engagement_score"]
+        })
 
-    st.success("🏆 **Top Content Recommendation (Best Engagement Score)**")
-    st.write(best_text)
-    st.write(f"📊 **Engagement Score:** {best_score}")
+    st.markdown("### 🏆 Top Content Recommendation")
+    st.write(top["content"])
+    st.json({
+        "readability": top["readability"],
+        "sentiment_strength": top["sentiment_strength"],
+        "engagement_score": top["engagement_score"]
+    })
