@@ -1,13 +1,14 @@
 import torch
 from transformers import pipeline
 
-model_path = "./AI_Content_Optimizer_Trained"
-device = 0 if torch.cuda.is_available() else -1
+# CPU only for Streamlit Cloud
+device = -1
 
+# Use small pre-trained model to ensure it loads
 generator = pipeline(
     "text-generation",
-    model=model_path,
-    tokenizer=model_path,
+    model="distilgpt2",  # small model ~250M params
+    tokenizer="distilgpt2",
     device=device,
 )
 
