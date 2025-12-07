@@ -1,62 +1,61 @@
 import streamlit as st
-from model_generator import generate_for_user, mock_engagement_score
-from textblob import TextBlob
-import textstat
+from model_generator import generate_content, build_prompt
+from sentiment_analyzer import analyze_sentiment
+from performance_metrics import performance_metrics, pick_best_version
 
-# Page Setup
-st.set_page_config(page_title="AI Content Marketing Optimizer", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="AI Content Marketing Optimizer", layout="wide")
+
 st.title("🎯 AI Content Marketing Optimizer")
-st.markdown("Generate, analyze, and optimize social media content using your AI model.")
+st.write("Generate, analyze, and optimize content using your fine-tuned AI model.")
 
+st.markdown("---")
+
+# -----------------------------
 # Inputs
-platform = st.selectbox("Platform", ["Instagram", "YouTube", "TikTok", "Blog", "LinkedIn"])
-topic = st.text_input("Topic / Niche", "AI in Healthcare")
-tone = st.selectbox("Tone of the Content", ["Professional", "Friendly", "Witty"])
-size = st.selectbox("Content Size", ["Short", "Medium", "Long"])
-n_variations = st.slider("Number of Variations", 1, 5, 3)
-generate_btn = st.button("Generate Content")
+# -----------------------------
+platform = st.text_input("📝 Platform (Instagram, YouTube, Blog, LinkedIn, etc.)")
+topic = st.text_input("🎯 Topic / Niche")
+tone = st.selectbox("🎭 Tone of the Content", ["friendly", "professional", "witty", "emotional"])
+size = st.selectbox("📏 Content Size", ["short", "medium", "long"])
 
-# Metrics
-def sentiment_score(text):
-    blob = TextBlob(text)
-    return round((blob.sentiment.polarity + 1) / 2, 3)
+generate_btn = st.button("🚀 Generate Optimized Content")
 
-def readability_score(text):
-    try:
-        return round(textstat.flesch_reading_ease(text), 2)
-    except:
-        return 0
-
+# -----------------------------
+# Run the Model
+# -----------------------------
 if generate_btn:
-    with st.spinner("⏳ Generating content..."):
-        top_raw, variations_raw = generate_for_user(platform, topic, tone, size, n_variations)
 
-        scored = []
-        for v in variations_raw:
-            score = {
-                "content": v,
-                "readability": readability_score(v),
-                "sentiment_strength": sentiment_score(v),
-                "engagement_score": mock_engagement_score(v)
-            }
-            scored.append(score)
+    if not platform or not topic:
+        st.warning("⚠️ Please enter both Platform and Topic before generating.")
+        st.stop()
 
-        top = max(scored, key=lambda x: x["engagement_score"])
+    prompt = build_prompt(platform, topic, tone, size)
 
-    st.markdown("### 🔹 Generated Content Variations")
-    for i, s in enumerate(scored, 1):
-        st.subheader(f"Variation {i}")
-        st.write(s["content"])
-        st.json({
-            "readability": s["readability"],
-            "sentiment_strength": s["sentiment_strength"],
-            "engagement_score": s["engagement_score"]
-        })
+    st.info("⏳ Generating content variations... please wait.")
+    variations = generate_content(prompt)
 
-    st.markdown("### 🏆 Top Content")
-    st.write(top["content"])
-    st.json({
-        "readability": top["readability"],
-        "sentiment_strength": top["sentiment_strength"],
-        "engagement_score": top["engagement_score"]
-    })
+    st.markdown("---")
+    st.subheader("✨ Generated Content Variations")
+
+    all_metrics = []
+
+    for i, text in enumerate(variations):
+        st.write(f"### 🔹 Variation {i+1}")
+        st.write(text)
+
+        sentiment, sentiment_score = analyze_sentiment(text)
+
+        metrics = performance_metrics(text, sentiment_score)
+        all_metrics.append(metrics)
+
+        st.json(metrics)
+        st.markdown("---")
+
+    # -----------------------------
+    # Best Output Selection
+    # -----------------------------
+    best_text, best_score = pick_best_version(variations)
+
+    st.success("🏆 **Top Content Recommendation (Best Engagement Score)**")
+    st.write(best_text)
+    st.write(f"📊 **Engagement Score:** {best_score}")
