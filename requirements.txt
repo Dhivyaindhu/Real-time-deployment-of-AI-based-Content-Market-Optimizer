@@ -1,7 +1,7 @@
 streamlit==1.29.0
-torch==2.9.1            # updated to a version compatible with Python 3.13
+torch==2.9.1
 transformers==4.34.0
-accelerate==0.23.3
+accelerate==0.30.0           # updated to Python 3.13 compatible
 sentencepiece==0.1.99
 textstat==0.7.2
 protobuf==4.23.4
