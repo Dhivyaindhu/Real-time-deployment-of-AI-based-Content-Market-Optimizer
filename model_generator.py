@@ -1,123 +1,81 @@
 import torch
 from transformers import pipeline
-import re
-import random
 
-device = -1  # CPU
+# -----------------------------
+# Load QLoRA fine-tuned model
+# -----------------------------
+model_path = "./AI_Content_Optimizer_Trained"
 
-# Try loading custom LoRA model
-try:
-    model_path = "./AI_Content_Optimizer_Trained"
-    generator = pipeline(
-        "text-generation",
-        model=model_path,
-        tokenizer=model_path,
-        device=device
-    )
-    print("✅ Loaded trained model")
-except:
-    print("⚠️ Trained model not found. Using distilgpt2.")
-    generator = pipeline(
-        "text-generation",
-        model="distilgpt2",
-        tokenizer="distilgpt2",
-        device=device
-    )
+device = 0 if torch.cuda.is_available() else -1
 
-# -------------------------------------------------------------------
-# STRICT FORMATTER (MOST IMPORTANT PART)
-# -------------------------------------------------------------------
+generator = pipeline(
+    "text-generation",
+    model=model_path,
+    tokenizer=model_path,
+    device=device,
+)
 
-def clean_output(text):
-    """
-    Removes repeated prompt, repeated instructions, junk, and extracts only numbered content.
-    """
-    text = text.replace("\n\n", "\n")
-    lines = text.split("\n")
-
-    cleaned = []
-    for line in lines:
-        line = line.strip()
-
-        # Extract only lines starting with "1." "2." "3." etc.
-        if re.match(r"^\d+\.", line):
-            cleaned.append(line)
-
-    return "\n".join(cleaned).strip()
-
-
-# -------------------------------------------------------------------
-# STRONG PROMPT BUILDER
-# -------------------------------------------------------------------
-
-def build_prompt(platform, topic, tone, size, n):
+# -----------------------------
+# Build Prompt
+# -----------------------------
+def build_prompt(platform, topic, tone="friendly", size="medium"):
     size_map = {
-        "Short": "1–2 sentences",
-        "Medium": "3–4 sentences",
-        "Long": "5–8 sentences"
+        "short": "Keep it concise, 1–2 sentences.",
+        "medium": "Provide 3–4 sentences with moderate detail.",
+        "long": "Provide 5–6 sentences with deeper insights."
     }
 
-    return f"""
-You are an AI social media content generator.
+    size_instruction = size_map.get(size.lower(), size_map["medium"])
 
-Generate EXACTLY {n} short content variations for {platform} about: "{topic}".
+    prompt = (
+        f"You are a social media content expert. "
+        f"Generate content for {platform} about '{topic}' with a {tone} tone. "
+        f"{size_instruction} Format the output as a clean numbered list without repetition."
+    )
+    return prompt
 
-Tone: {tone}
-Length: {size_map[size]}
-
-Rules:
-1. You MUST output only a numbered list.
-2. Format strictly like:
-   1. sentence
-   2. sentence
-   3. sentence
-3. NO paragraphs, NO hashtags, NO emojis.
-4. NO repeating instructions.
-5. Only clean, final content.
-
-Now generate the content:
-""".strip()
-
-
-# -------------------------------------------------------------------
-# GENERATOR FUNCTION
-# -------------------------------------------------------------------
-
-def generate_content(prompt, n_sequences):
-    raw_outputs = generator(
+# -----------------------------
+# Generate text variations
+# -----------------------------
+def generate_content(prompt, max_tokens=180, n_variations=3, temperature=0.7):
+    outputs = generator(
         prompt,
-        max_new_tokens=180,
-        temperature=0.8,
-        top_p=0.9,
-        num_return_sequences=n_sequences,
-        do_sample=True
+        max_new_tokens=max_tokens,
+        do_sample=True,
+        temperature=temperature,
+        num_return_sequences=n_variations,
+        no_repeat_ngram_size=3
     )
 
-    return [clean_output(o["generated_text"]) for o in raw_outputs]
+    # ALWAYS return cleaned list of strings
+    return [output["generated_text"] for output in outputs]
 
+# -----------------------------
+# Clean & optimize output
+# -----------------------------
+def optimize_output(text_list):
+    cleaned_variations = []
 
-# -------------------------------------------------------------------
-# SCORING (FAKE ENGAGEMENT SCORE)
-# -------------------------------------------------------------------
+    for text in text_list:
+        lines = text.split("\n")
+        unique = []
+        seen = set()
 
-def mock_engagement_score(text):
-    return round(random.uniform(65, 100), 2)
+        for line in lines:
+            line = line.strip()
+            if line and line not in seen:
+                seen.add(line)
+                unique.append(line)
 
+        cleaned_variations.append("\n".join(unique))
 
-# -------------------------------------------------------------------
-# MAIN FUNCTION CALLED FROM app.py
-# -------------------------------------------------------------------
+    return cleaned_variations
 
-def generate_for_user(platform, topic, tone, size, n):
-    prompt = build_prompt(platform, topic, tone, size, n)
-    variations = generate_content(prompt, n)
-
-    # If any variation fails to follow structure → try to fix
-    fixed_variations = []
-    for v in variations:
-        if v.strip() == "":
-            # fallback: create blank numbered structure
-            v = "\n".join([f"{i+1}. ..." for i in range(n)])
-        fixed_variations.append(v)
-
-    return fixed_variations[0], fixed_variations
+# -----------------------------
+# Wrapper used in Streamlit
+# -----------------------------
+def get_variations(platform, topic, tone="friendly", size="medium"):
+    prompt = build_prompt(platform, topic, tone, size)
+    raw_outputs = generate_content(prompt)
+    optimized_outputs = optimize_output(raw_outputs)
+    return optimized_outputs
