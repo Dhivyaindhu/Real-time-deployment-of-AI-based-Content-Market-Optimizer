@@ -16,49 +16,41 @@ size = st.selectbox("Content Size", ["Short", "Medium", "Long"])
 n_variations = st.slider("Number of Variations", 1, 5, 3)
 generate_btn = st.button("Generate Content")
 
-def calculate_sentiment(text):
+# Metrics
+def sentiment_score(text):
     blob = TextBlob(text)
     return round((blob.sentiment.polarity + 1) / 2, 3)
 
-def calculate_readability(text):
-    try: 
+def readability_score(text):
+    try:
         return round(textstat.flesch_reading_ease(text), 2)
-    except: 
+    except:
         return 0
 
-def clean_generated_text(text):
-    lines = text.split("\n")
-    numbered = [line for line in lines if line.strip() and line.strip()[0].isdigit()]
-    return "\n".join(numbered) if numbered else text.strip()
-
 if generate_btn:
-    with st.spinner("⏳ Generating dynamic content..."):
-        top_content, variations = generate_for_user(platform, topic, tone, size, n_variations)
+    with st.spinner("⏳ Generating content..."):
+        top_raw, variations_raw = generate_for_user(platform, topic, tone, size, n_variations)
 
-        scored_contents = []
-        for v in variations:
-            clean_text = clean_generated_text(v)
-            readability = calculate_readability(clean_text)
-            sentiment = calculate_sentiment(clean_text)
-            engagement = mock_engagement_score(clean_text)
+        scored = []
+        for v in variations_raw:
+            score = {
+                "content": v,
+                "readability": readability_score(v),
+                "sentiment_strength": sentiment_score(v),
+                "engagement_score": mock_engagement_score(v)
+            }
+            scored.append(score)
 
-            scored_contents.append({
-                "content": clean_text,
-                "readability": readability,
-                "sentiment_strength": sentiment,
-                "engagement_score": engagement
-            })
-
-        top = max(scored_contents, key=lambda x: x["engagement_score"])
+        top = max(scored, key=lambda x: x["engagement_score"])
 
     st.markdown("### 🔹 Generated Content Variations")
-    for idx, c in enumerate(scored_contents, 1):
-        st.subheader(f"Variation {idx}")
-        st.write(c["content"])
+    for i, s in enumerate(scored, 1):
+        st.subheader(f"Variation {i}")
+        st.write(s["content"])
         st.json({
-            "readability": c["readability"],
-            "sentiment_strength": c["sentiment_strength"],
-            "engagement_score": c["engagement_score"]
+            "readability": s["readability"],
+            "sentiment_strength": s["sentiment_strength"],
+            "engagement_score": s["engagement_score"]
         })
 
     st.markdown("### 🏆 Top Content")
