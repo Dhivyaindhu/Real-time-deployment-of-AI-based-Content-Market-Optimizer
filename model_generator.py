@@ -1,33 +1,29 @@
+# model_generator.py
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import streamlit as st
 
 # -------------------------------------------------------------------
-# Configuration - Using base model only
+# Configuration
 # -------------------------------------------------------------------
 BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 
 # -------------------------------------------------------------------
-# Load Base Model Only (No LoRA)
+# Load model and tokenizer
 # -------------------------------------------------------------------
 @st.cache_resource(show_spinner="Loading AI model...")
 def load_model():
-    """Load base model without LoRA adapter"""
     try:
         tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
-        
         model = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
             torch_dtype=torch.float16,
             device_map="auto",
             low_cpu_mem_usage=True
         )
-        
         model.eval()
-        
-        st.info("ℹ️ Using base Qwen model (fine-tuned adapter not loaded)")
+        st.info("ℹ️ Base Qwen model loaded successfully")
         return model, tokenizer
-    
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
         return None, None
@@ -46,15 +42,14 @@ def build_prompt(platform, topic, tone="friendly", size="medium"):
     size_instruction = size_map.get(size.lower(), size_map["medium"])
     
     return (
-        f"You are a social media content expert. "
-        f"Generate content for {platform} about '{topic}' with a {tone} tone. "
-        f"{size_instruction} Format the response as a clean numbered list with no repetition."
+        f"Generate social media content for {platform} about '{topic}' with a {tone} tone. "
+        f"{size_instruction} Format as a clean numbered list with no repetition."
     )
 
 # -------------------------------------------------------------------
 # Generate content
 # -------------------------------------------------------------------
-def generate_content(prompt, max_tokens=180, n_variations=3, temperature=0.7):
+def generate_content(prompt, max_tokens=200, n_variations=3, temperature=0.7):
     if model is None or tokenizer is None:
         return ["Error: Model not loaded."]
     
@@ -75,6 +70,11 @@ def generate_content(prompt, max_tokens=180, n_variations=3, temperature=0.7):
                 )
             
             text = tokenizer.decode(output[0], skip_special_tokens=True)
+            
+            # Remove the prompt from generated text
+            if text.startswith(prompt):
+                text = text[len(prompt):].strip()
+            
             results.append(text)
             
             if torch.cuda.is_available():
@@ -87,7 +87,7 @@ def generate_content(prompt, max_tokens=180, n_variations=3, temperature=0.7):
     return results
 
 # -------------------------------------------------------------------
-# Clean duplicates
+# Optimize / clean output
 # -------------------------------------------------------------------
 def optimize_output(text_list):
     cleaned = []
@@ -104,7 +104,7 @@ def optimize_output(text_list):
     return cleaned
 
 # -------------------------------------------------------------------
-# Main function
+# Public function to get variations
 # -------------------------------------------------------------------
 def get_variations(platform, topic, tone="friendly", size="medium"):
     if model is None or tokenizer is None:
