@@ -1,6 +1,7 @@
+pip
 streamlit
-transformers
 torch
+transformers
 peft
 accelerate
 sentencepiece
@@ -8,5 +9,4 @@ protobuf
 scikit-learn
 pandas
 numpy
-tiktoken
 textblob
