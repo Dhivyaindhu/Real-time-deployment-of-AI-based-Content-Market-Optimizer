@@ -15,17 +15,24 @@ LORA_MODEL_PATH = "./AI_Content_Optimizer_Trained"
 @st.cache_resource(show_spinner="Loading AI LoRA model...")
 def load_model():
     try:
+        # Load tokenizer from base model
         tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
+
+        # Load base model
         base_model = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
             device_map="auto",
             low_cpu_mem_usage=True
         )
+
+        # Apply LoRA adapter
         model = PeftModel.from_pretrained(base_model, LORA_MODEL_PATH)
         model.eval()
+
         st.info(f"ℹ️ LoRA model loaded successfully from {LORA_MODEL_PATH}")
         return model, tokenizer
+
     except Exception as e:
         st.error(f"Error loading LoRA model: {str(e)}")
         return None, None
