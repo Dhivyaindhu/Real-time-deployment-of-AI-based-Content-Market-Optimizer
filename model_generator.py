@@ -1,4 +1,3 @@
-# model_generator.py
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
@@ -16,24 +15,17 @@ LORA_MODEL_PATH = "./AI_Content_Optimizer_Trained"
 @st.cache_resource(show_spinner="Loading AI LoRA model...")
 def load_model():
     try:
-        # Load tokenizer from LoRA folder
-        tokenizer = AutoTokenizer.from_pretrained(LORA_MODEL_PATH)
-
-        # Load base model
+        tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
         base_model = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
             device_map="auto",
             low_cpu_mem_usage=True
         )
-
-        # Apply LoRA adapter
         model = PeftModel.from_pretrained(base_model, LORA_MODEL_PATH)
         model.eval()
-
         st.info(f"ℹ️ LoRA model loaded successfully from {LORA_MODEL_PATH}")
         return model, tokenizer
-
     except Exception as e:
         st.error(f"Error loading LoRA model: {str(e)}")
         return None, None
@@ -50,7 +42,6 @@ def build_prompt(platform, topic, tone="friendly", size="medium"):
         "long": "Provide 5–6 sentences with deeper insights."
     }
     size_instruction = size_map.get(size.lower(), size_map["medium"])
-    
     return (
         f"Generate social media content for {platform} about '{topic}' with a {tone} tone. "
         f"{size_instruction} Format as a clean numbered list with no repetition."
@@ -67,7 +58,6 @@ def generate_content(prompt, max_tokens=200, n_variations=3, temperature=0.7):
     try:
         for _ in range(n_variations):
             inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-            
             with torch.no_grad():
                 output = model.generate(
                     **inputs,
@@ -75,25 +65,19 @@ def generate_content(prompt, max_tokens=200, n_variations=3, temperature=0.7):
                     do_sample=True,
                     temperature=temperature,
                     top_p=0.9,
+                    top_k=50,
                     repetition_penalty=1.2,
                     pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id
                 )
-            
             text = tokenizer.decode(output[0], skip_special_tokens=True)
-            
-            # ✅ Strip prompt from output
             if text.startswith(prompt):
                 text = text[len(prompt):].strip()
-            
             results.append(text)
-            
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-    
     except Exception as e:
         st.error(f"Generation error: {str(e)}")
         results.append(f"Error: {str(e)}")
-    
     return results
 
 # -------------------------------------------------------------------
