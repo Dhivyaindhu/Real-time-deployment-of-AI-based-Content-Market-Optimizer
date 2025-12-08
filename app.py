@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 from model_generator import get_variations
 from sentiment_analyzer import analyze_sentiment
@@ -29,6 +28,7 @@ if generate_btn:
         st.stop()
 
     st.info("⏳ Generating content variations... please wait.")
+    
     variations = get_variations(platform, topic, tone, size)
 
     st.markdown("---")
