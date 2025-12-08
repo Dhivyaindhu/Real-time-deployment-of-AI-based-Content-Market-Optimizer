@@ -1,54 +1,51 @@
-import streamlit as st
+import gradio as gr
 from model_generator import get_variations
 from sentiment_analyzer import analyze_sentiment
 from performance_metrics import performance_metrics, pick_best_version
 
-st.set_page_config(page_title="AI Content Marketing Optimizer", layout="wide")
-
-st.title("🎯 AI Content Marketing Optimizer")
-st.write("Generate, analyze, and optimize content using your AI model.")
-st.markdown("---")
-
-# -----------------------------
-# User Inputs
-# -----------------------------
-platform = st.text_input("📝 Platform (Instagram, YouTube, Blog, LinkedIn, etc.)")
-topic = st.text_input("🎯 Topic / Niche")
-tone = st.selectbox("🎭 Tone of the Content", ["friendly", "professional", "witty", "emotional"])
-size = st.selectbox("📏 Content Size", ["short", "medium", "long"])
-
-generate_btn = st.button("🚀 Generate Optimized Content")
-
-# -----------------------------
-# Generate and Display
-# -----------------------------
-if generate_btn:
-    if not platform or not topic:
-        st.warning("⚠️ Please enter both Platform and Topic before generating.")
-        st.stop()
-
-    st.info("⏳ Generating content variations... please wait.")
-    
+# Function to generate content and metrics
+def generate(platform, topic, tone, size):
+    # Generate variations
     variations = get_variations(platform, topic, tone, size)
 
-    st.markdown("---")
-    st.subheader("✨ Generated Content Variations")
-
-    all_metrics = []
-
+    results = []
     for i, text in enumerate(variations):
-        st.write(f"### 🔹 Variation {i+1}")
-        st.write(text)
-
         # Sentiment & performance metrics
         sentiment, sentiment_score = analyze_sentiment(text)
         metrics = performance_metrics(text, sentiment_score)
-        all_metrics.append(metrics)
 
-        st.json(metrics)
-        st.markdown("---")
+        results.append({
+            "Variation": f"Variation {i+1}",
+            "Content": text,
+            "Metrics": metrics
+        })
 
+    # Pick best content
     best_text, best_score = pick_best_version(variations)
-    st.success("🏆 **Top Content Recommendation (Best Engagement Score)**")
-    st.write(best_text)
-    st.write(f"📊 **Engagement Score:** {best_score}")
+
+    return results, best_text, best_score
+
+# Define Gradio interface
+with gr.Blocks() as demo:
+    gr.Markdown("## 🎯 AI Content Marketing Optimizer")
+    with gr.Row():
+        with gr.Column():
+            platform_input = gr.Textbox(label="Platform (Instagram, YouTube, Blog, LinkedIn, etc.)")
+            topic_input = gr.Textbox(label="Topic / Niche")
+            tone_input = gr.Dropdown(["friendly", "professional", "witty", "emotional"], label="Tone")
+            size_input = gr.Dropdown(["short", "medium", "long"], label="Content Size")
+            generate_btn = gr.Button("🚀 Generate Optimized Content")
+        with gr.Column():
+            output_variations = gr.Dataframe(headers=["Variation", "Content", "Metrics"])
+            best_content = gr.Textbox(label="🏆 Top Content Recommendation")
+            best_score = gr.Textbox(label="📊 Engagement Score")
+
+    generate_btn.click(
+        fn=generate,
+        inputs=[platform_input, topic_input, tone_input, size_input],
+        outputs=[output_variations, best_content, best_score]
+    )
+
+# Launch Gradio app
+if __name__ == "__main__":
+    demo.launch()
