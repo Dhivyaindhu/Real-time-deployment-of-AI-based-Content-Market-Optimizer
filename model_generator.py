@@ -1,31 +1,41 @@
 # model_generator.py
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from peft import PeftModel
 import streamlit as st
 
 # -------------------------------------------------------------------
-# Configuration
+# Model paths
 # -------------------------------------------------------------------
 BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
+LORA_MODEL_PATH = "./AI_Content_Optimizer_Trained"
 
 # -------------------------------------------------------------------
-# Load model and tokenizer
+# Load LoRA-adapted model
 # -------------------------------------------------------------------
-@st.cache_resource(show_spinner="Loading AI model...")
+@st.cache_resource(show_spinner="Loading AI LoRA model...")
 def load_model():
     try:
-        tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
-        model = AutoModelForCausalLM.from_pretrained(
+        # Load tokenizer from LoRA folder
+        tokenizer = AutoTokenizer.from_pretrained(LORA_MODEL_PATH)
+
+        # Load base model
+        base_model = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
             torch_dtype=torch.float16,
             device_map="auto",
             low_cpu_mem_usage=True
         )
+
+        # Apply LoRA adapter
+        model = PeftModel.from_pretrained(base_model, LORA_MODEL_PATH)
         model.eval()
-        st.info("ℹ️ Base Qwen model loaded successfully")
+
+        st.info(f"ℹ️ LoRA model loaded successfully from {LORA_MODEL_PATH}")
         return model, tokenizer
+
     except Exception as e:
-        st.error(f"Error loading model: {str(e)}")
+        st.error(f"Error loading LoRA model: {str(e)}")
         return None, None
 
 model, tokenizer = load_model()
@@ -71,7 +81,7 @@ def generate_content(prompt, max_tokens=200, n_variations=3, temperature=0.7):
             
             text = tokenizer.decode(output[0], skip_special_tokens=True)
             
-            # Remove the prompt from generated text
+            # ✅ Strip prompt from output
             if text.startswith(prompt):
                 text = text[len(prompt):].strip()
             
