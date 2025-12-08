@@ -1,7 +1,6 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
-import streamlit as st
 
 # -------------------------------------------------------------------
 # Model paths
@@ -10,9 +9,8 @@ BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 LORA_MODEL_PATH = "./AI_Content_Optimizer_Trained"
 
 # -------------------------------------------------------------------
-# Load LoRA-adapted model
+# Load LoRA-adapted model (CPU compatible)
 # -------------------------------------------------------------------
-@st.cache_resource(show_spinner="Loading AI LoRA model...")
 def load_model():
     try:
         # Load tokenizer from base model
@@ -21,7 +19,7 @@ def load_model():
         # Load base model
         base_model = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
-            dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            dtype=torch.float32,  # CPU-friendly
             device_map="auto",
             low_cpu_mem_usage=True
         )
@@ -30,11 +28,11 @@ def load_model():
         model = PeftModel.from_pretrained(base_model, LORA_MODEL_PATH)
         model.eval()
 
-        st.info(f"ℹ️ LoRA model loaded successfully from {LORA_MODEL_PATH}")
+        print(f"ℹ️ LoRA model loaded successfully from {LORA_MODEL_PATH}")
         return model, tokenizer
 
     except Exception as e:
-        st.error(f"Error loading LoRA model: {str(e)}")
+        print(f"Error loading LoRA model: {str(e)}")
         return None, None
 
 model, tokenizer = load_model()
@@ -60,7 +58,7 @@ def build_prompt(platform, topic, tone="friendly", size="medium"):
 def generate_content(prompt, max_tokens=200, n_variations=3, temperature=0.7):
     if model is None or tokenizer is None:
         return ["Error: Model not loaded."]
-    
+
     results = []
     try:
         for _ in range(n_variations):
@@ -80,11 +78,14 @@ def generate_content(prompt, max_tokens=200, n_variations=3, temperature=0.7):
             if text.startswith(prompt):
                 text = text[len(prompt):].strip()
             results.append(text)
+
+            # Free up memory after each generation
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+
     except Exception as e:
-        st.error(f"Generation error: {str(e)}")
         results.append(f"Error: {str(e)}")
+
     return results
 
 # -------------------------------------------------------------------
@@ -110,7 +111,7 @@ def optimize_output(text_list):
 def get_variations(platform, topic, tone="friendly", size="medium"):
     if model is None or tokenizer is None:
         return ["Model not available."]
-    
+
     prompt = build_prompt(platform, topic, tone, size)
     raw_outputs = generate_content(prompt)
     return optimize_output(raw_outputs)
