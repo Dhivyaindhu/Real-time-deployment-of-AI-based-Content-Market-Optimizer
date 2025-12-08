@@ -1,6 +1,6 @@
-pip
+pip>=23.2.0
 streamlit
-torch
+torch --index-url https://download.pytorch.org/whl/cpu
 transformers
 peft
 accelerate
